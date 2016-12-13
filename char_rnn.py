@@ -70,7 +70,7 @@ def load_all_text(files):
 
 
 def generate(max_len, text, chars, char_labels, labels_char, model,
-             temperature=0.35, seed=None, predicate=lambda x: len(x) < 100):
+             temperature=0.35, seed=None, predicate=lambda x: len(x) < 200):
     if seed is None:
         # if no seed text is specified, randomly select a chunk of text
         start_idx = random.randint(0, len(text) - max_len - 1)
