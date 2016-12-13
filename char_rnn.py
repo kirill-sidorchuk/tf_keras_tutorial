@@ -113,7 +113,7 @@ def load_all_text(files):
     for file in files:
         this_text = open(file, 'r').read()
         text += this_text
-    return text
+    return text.replace('\r', '')
 
 
 def generate(max_len, text, chars, char_labels, labels_char, model,
