@@ -1,7 +1,8 @@
 import argparse
 import os
-from random import random
+import random
 
+import keras
 import numpy as np
 
 from keras.layers import LSTM, Dropout, Dense, Activation
@@ -28,9 +29,9 @@ def extract_set_of_chars(list_of_files):
 
 def create_model(chars, max_len):
     model = Sequential()
-    model.add(LSTM(512, return_sequences=True, input_shape=(max_len, len(chars))))
+    model.add(LSTM(256, return_sequences=True, input_shape=(max_len, len(chars))))
     model.add(Dropout(0.2))
-    model.add(LSTM(512, return_sequences=False))
+    model.add(LSTM(256, return_sequences=False))
     model.add(Dropout(0.2))
     model.add(Dense(len(chars)))
     model.add(Activation('softmax'))
@@ -61,7 +62,7 @@ def prepare_data(inputs, max_len, chars, char_labels, outputs):
 
 
 def load_all_text(files):
-    text = list()
+    text = ""
     for file in files:
         this_text = open(file, 'r').read()
         text += this_text
@@ -70,13 +71,13 @@ def load_all_text(files):
 
 def generate(max_len, text, chars, char_labels, labels_char, model,
              temperature=0.35, seed=None, predicate=lambda x: len(x) < 100):
-    if seed is None and len(seed) < max_len:
-        raise Exception('Seed text must be at least {} chars long'.format(max_len))
-
-    # if no seed text is specified, randomly select a chunk of text
-    else:
+    if seed is None:
+        # if no seed text is specified, randomly select a chunk of text
         start_idx = random.randint(0, len(text) - max_len - 1)
         seed = text[start_idx:start_idx + max_len]
+    else:
+        if len(seed) < max_len:
+            raise Exception('Seed text must be at least {} chars long'.format(max_len))
 
     sentence = seed
     generated = sentence
@@ -103,8 +104,44 @@ def generate(max_len, text, chars, char_labels, labels_char, model,
 def sample(probs, temperature):
     """samples an index from a vector of probabilities"""
     a = np.log(probs)/temperature
-    a = np.exp(a)/np.sum(np.exp(a))
+    exp_a = np.exp(a)
+    a = exp_a / (np.sum(exp_a) + 1e-3)
+    if np.sum(a[:-1]) > 1.0:
+        print("yo")
     return np.argmax(np.random.multinomial(1, a, 1))
+
+
+def generate_some_text(model, chars, char_labels, labels_char, seed_text, max_len, text):
+    print(generate(max_len, text, chars, seed=seed_text, char_labels=char_labels, labels_char=labels_char, model=model))
+
+
+def train_model(model, text, char_labels, labels_char, max_len, all_chars, start_epoch):
+    step = 3
+    inputs = []
+    outputs = []
+    for i in range(0, len(text) - max_len, step):
+        inputs.append(text[i:i + max_len])
+        outputs.append(text[i + max_len])
+
+    X, y = prepare_data(inputs, max_len, all_chars, char_labels, outputs)
+
+    n_epochs = 10
+    for i in range(start_epoch+1, n_epochs):
+        print('Starting training for epoch', i+1)
+
+        # set nb_epoch to 1 since we're iterating manually
+        model.fit(X, y, batch_size=128, nb_epoch=1)
+        model.save('model_' + str(i) + '.h5')
+
+        # preview
+        for temp in [0.2, 0.5, 1., 1.2]:
+            print('\n\ttemperature:', temp)
+            print(generate(max_len, text, all_chars, char_labels, labels_char, model, temperature=temp))
+
+
+def parse_epoch(snapshot):
+    title = os.path.splitext(os.path.split(snapshot)[1])[0]
+    return int(title[6:])
 
 
 def train(args):
@@ -132,31 +169,19 @@ def train(args):
 
     # text window length
     max_len = 20
+    start_epoch = 0
 
-    step = 3
-    inputs = []
-    outputs = []
-    for i in range(0, len(text) - max_len, step):
-        inputs.append(text[i:i + max_len])
-        outputs.append(text[i + max_len])
+    if args.snapshot is not None:
+        model = keras.models.load_model(args.snapshot)
+        start_epoch = parse_epoch(args.snapshot)
+        print('using snapshot ' + args.snapshot)
+    else:
+        model = create_model(all_chars, max_len)
 
-    X, y = prepare_data(inputs, max_len, all_chars, char_labels, outputs)
-
-    model = create_model(all_chars, max_len)
-
-    n_epochs = 10
-    for i in range(n_epochs):
-        print('epoch', i)
-
-        # set nb_epoch to 1 since we're iterating manually
-        model.fit(X, y, batch_size=128, nb_epoch=1)
-
-        # preview
-        for temp in [0.2, 0.5, 1., 1.2]:
-            print('\n\ttemperature:', temp)
-            print(generate(max_len, text, all_chars, char_labels, labels_char, model, temperature=temp))
-
-    pass
+    if bool(args.train):
+        train_model(model, text, char_labels, labels_char, max_len, all_chars, start_epoch)
+    else:
+        generate_some_text(model, all_chars, char_labels, labels_char, args.seed_text, max_len, text)
 
 
 if __name__ == "__main__":
@@ -164,5 +189,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train char RNN.')
     parser.add_argument("train_dir", type=str, help="directory with train text files")
     parser.add_argument("test_dir", type=str, help="directory with test text files")
-    _args = parser.parse_args()
-    train(_args)
+    parser.add_argument("-snapshot", type=str, default=None, help="model to use at start of training")
+    parser.add_argument("-train", type=str, default=False, help="do training")
+    parser.add_argument("-seed_text", type=str, default=None, help="seed text for generator")
+
+    train(parser.parse_args())
