@@ -1,11 +1,12 @@
 import argparse
 import os
 import random
+import pickle
 
 import keras
 import numpy as np
 
-from keras.layers import LSTM, Dropout, Dense, Activation
+from keras.layers import LSTM, Dropout, Dense, Activation, GRU
 from keras.models import Sequential
 
 
@@ -27,7 +28,30 @@ def extract_set_of_chars(list_of_files):
     return all_chars
 
 
-def create_model(chars, max_len):
+def create_model_gru_big(chars, max_len):
+    model = Sequential()
+    model.add(GRU(512, return_sequences=True, input_shape=(max_len, len(chars))))
+    model.add(Dropout(0.2))
+    model.add(GRU(512, return_sequences=True))
+    model.add(Dropout(0.2))
+    model.add(GRU(512, return_sequences=False))
+    model.add(Dropout(0.2))
+    model.add(Dense(len(chars)))
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+    return model
+
+
+def create_model_gru_small_opt(chars, max_len):
+    model = Sequential()
+    model.add(GRU(512, return_sequences=True, input_shape=(max_len, len(chars))))
+    model.add(GRU(len(chars), return_sequences=False))
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+    return model
+
+
+def create_model_lstm_big(chars, max_len):
     model = Sequential()
     model.add(LSTM(512, return_sequences=True, input_shape=(max_len, len(chars))))
     model.add(Dropout(0.2))
@@ -36,6 +60,27 @@ def create_model(chars, max_len):
     model.add(LSTM(512, return_sequences=False))
     model.add(Dropout(0.2))
     model.add(Dense(len(chars)))
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+    return model
+
+
+def create_model_lstm_small(chars, max_len):
+    model = Sequential()
+    model.add(LSTM(256, return_sequences=True, input_shape=(max_len, len(chars))))
+    model.add(Dropout(0.2))
+    model.add(LSTM(256, return_sequences=False))
+    model.add(Dropout(0.2))
+    model.add(Dense(len(chars)))
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+    return model
+
+
+def create_model_lstm_small_optimized(chars, max_len):
+    model = Sequential()
+    model.add(LSTM(256, return_sequences=True, input_shape=(max_len, len(chars)), dropout_U=0.2, dropout_W=0.2))
+    model.add(LSTM(len(chars), return_sequences=False, dropout_U=0.2, dropout_W=0.2))
     model.add(Activation('softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
     return model
@@ -146,23 +191,37 @@ def parse_epoch(snapshot):
     return int(title[6:])
 
 
+def load_chars(char_set_file_name):
+    with open(char_set_file_name, 'rb') as input:
+        return pickle.load(input)
+
+
+def save_chars(char_set_file_name, all_chars):
+    with open(char_set_file_name, 'wb') as output:
+        pickle.dump(all_chars, output, -1)
+
+
 def train(args):
 
     train_files = get_dir_files(args.train_dir)
     print('Train corpus contains %d files' % len(train_files))
 
-    train_chars_set = extract_set_of_chars(train_files)
-    print('Train set of chars contains %d different chars' % len(train_chars_set))
-
     test_files = get_dir_files(args.test_dir)
     print('Test corpus contains %d files' % len(test_files))
 
-    test_chars_set = extract_set_of_chars(test_files)
-    print('Test set of chars contains %d different chars' % len(test_chars_set))
+    char_set_file_name = "all_chars.pkl"
+    all_chars = None
+    try:
+        all_chars = load_chars(char_set_file_name)
+    except:
+        pass
 
-    all_chars = list(test_chars_set | train_chars_set)
-    np.save("all_chars.np", np.array(all_chars))
-    print('Total number of different chars = %d' % len(train_chars_set))
+    if all_chars is None:
+        print('Extracting char set from data')
+        all_chars = extract_char_set(test_files, train_files)
+        save_chars(char_set_file_name, all_chars)
+
+    print('Total number of different chars = %d' % len(all_chars))
 
     char_labels = {ch: i for i, ch in enumerate(all_chars)}
     labels_char = {i: ch for i, ch in enumerate(all_chars)}
@@ -179,12 +238,21 @@ def train(args):
         start_epoch = parse_epoch(args.snapshot)
         print('using snapshot ' + args.snapshot)
     else:
-        model = create_model(all_chars, max_len)
+        model = create_model_gru_small_opt(all_chars, max_len)
 
     if bool(args.train):
         train_model(model, text, char_labels, labels_char, max_len, all_chars, start_epoch)
     else:
         generate_some_text(model, all_chars, char_labels, labels_char, args.seed_text, max_len, text)
+
+
+def extract_char_set(test_files, train_files):
+    train_chars_set = extract_set_of_chars(train_files)
+    print('Train set of chars contains %d different chars' % len(train_chars_set))
+    test_chars_set = extract_set_of_chars(test_files)
+    print('Test set of chars contains %d different chars' % len(test_chars_set))
+    all_chars = list(test_chars_set | train_chars_set)
+    return all_chars
 
 
 if __name__ == "__main__":
