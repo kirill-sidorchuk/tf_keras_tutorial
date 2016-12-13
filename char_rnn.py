@@ -29,9 +29,11 @@ def extract_set_of_chars(list_of_files):
 
 def create_model(chars, max_len):
     model = Sequential()
-    model.add(LSTM(256, return_sequences=True, input_shape=(max_len, len(chars))))
+    model.add(LSTM(512, return_sequences=True, input_shape=(max_len, len(chars))))
     model.add(Dropout(0.2))
-    model.add(LSTM(256, return_sequences=False))
+    model.add(LSTM(512, return_sequences=True))
+    model.add(Dropout(0.2))
+    model.add(LSTM(512, return_sequences=False))
     model.add(Dropout(0.2))
     model.add(Dense(len(chars)))
     model.add(Activation('softmax'))
@@ -159,6 +161,7 @@ def train(args):
     print('Test set of chars contains %d different chars' % len(test_chars_set))
 
     all_chars = list(test_chars_set | train_chars_set)
+    np.save("all_chars.np", np.array(all_chars))
     print('Total number of different chars = %d' % len(train_chars_set))
 
     char_labels = {ch: i for i, ch in enumerate(all_chars)}
