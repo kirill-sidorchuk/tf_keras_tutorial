@@ -42,6 +42,18 @@ def create_model_gru_big(chars, max_len):
     return model
 
 
+def create_model_gru_small(chars, max_len):
+    model = Sequential()
+    model.add(GRU(256, return_sequences=True, input_shape=(max_len, len(chars))))
+    model.add(Dropout(0.2))
+    model.add(GRU(256, return_sequences=False))
+    model.add(Dropout(0.2))
+    model.add(Dense(len(chars)))
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
+    return model
+
+
 def create_model_gru_small_opt(chars, max_len):
     model = Sequential()
     model.add(GRU(512, return_sequences=True, input_shape=(max_len, len(chars))))
@@ -201,7 +213,7 @@ def save_chars(char_set_file_name, all_chars):
         pickle.dump(all_chars, output, -1)
 
 
-def train(args):
+def train_gen(args):
 
     train_files = get_dir_files(args.train_dir)
     print('Train corpus contains %d files' % len(train_files))
@@ -213,7 +225,8 @@ def train(args):
     all_chars = None
     try:
         all_chars = load_chars(char_set_file_name)
-    except:
+    except Exception as e:
+        print("Failed to read charset" + str(e))
         pass
 
     if all_chars is None:
@@ -238,7 +251,7 @@ def train(args):
         start_epoch = parse_epoch(args.snapshot)
         print('using snapshot ' + args.snapshot)
     else:
-        model = create_model_gru_small_opt(all_chars, max_len)
+        model = create_model_gru_small(all_chars, max_len)
 
     if bool(args.train):
         train_model(model, text, char_labels, labels_char, max_len, all_chars, start_epoch)
@@ -264,4 +277,4 @@ if __name__ == "__main__":
     parser.add_argument("-train", type=str, default=False, help="do training")
     parser.add_argument("-seed_text", type=str, default=None, help="seed text for generator")
 
-    train(parser.parse_args())
+    train_gen(parser.parse_args())
