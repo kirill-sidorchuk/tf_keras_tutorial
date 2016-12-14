@@ -170,8 +170,9 @@ def sample(probs, temperature):
     return np.argmax(np.random.multinomial(1, a, 1))
 
 
-def generate_some_text(model, chars, char_labels, labels_char, seed_text, max_len, text):
-    print(generate(max_len, text, chars, seed=seed_text, char_labels=char_labels, labels_char=labels_char, model=model))
+def generate_some_text(model, chars, char_labels, labels_char, seed_text, max_len, text, generate_len=200):
+    print(generate(max_len, text, chars, seed=seed_text, char_labels=char_labels, labels_char=labels_char, model=model,
+                   predicate=lambda x: len(x) < generate_len))
 
 
 def train_model(model, text, char_labels, labels_char, max_len, all_chars, start_epoch):
@@ -255,7 +256,7 @@ def train(args):
     if bool(args.train):
         train_model(model, text, char_labels, labels_char, max_len, all_chars, start_epoch)
     else:
-        generate_some_text(model, all_chars, char_labels, labels_char, args.seed_text, max_len, text)
+        generate_some_text(model, all_chars, char_labels, labels_char, args.seed_text, max_len, text, 600)
 
 
 def extract_char_set(test_files, train_files):
