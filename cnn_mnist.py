@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import argparse
 import os
-from scipy import ndimage
 from scipy import misc
 
 import keras
@@ -91,11 +90,60 @@ def load_image(full_path):
     return 255 - resized
 
 
+def plot_patches(img, data, n_patches, nx, patch_width, patch_height, patch_im_width, patch_im_height):
+
+    for patch in range(n_patches):
+        # calculating patch position on big image
+        i = patch % nx
+        j = patch // nx
+        x0 = i * patch_im_width
+        y0 = j * patch_im_height
+
+        # fetching, preparing and copying patch image
+        patch_data = data[:, :, :, patch]
+        for ch in range(patch_data.shape[2]):
+            img[ch, y0:y0 + patch_height, x0:x0 + patch_width] = patch_data[:, :, ch]
+
+    return img
+
+
+def show_layer_weights(model):
+    # first convolutional layer
+    weights = model.get_weights()[0]
+
+    # normalizing
+    w_min = np.min(weights)
+    w_max = np.max(weights)
+    weights = (weights - w_min) * (255. / (w_max - w_min))
+
+    n_channels = weights.shape[2]
+    n_patches = weights.shape[3]
+    patch_width = weights.shape[1]
+    patch_height = weights.shape[0]
+
+    nx = int(np.math.sqrt(n_patches))
+    ny = int(np.math.ceil(n_patches / float(nx)))
+    gap = 1
+    patch_im_width = gap + patch_width
+    patch_im_height = gap + patch_height
+
+    upscale_factor = 7
+
+    img = np.zeros((n_channels, ny * (gap + patch_height), nx * (gap + patch_width)))
+    plot_patches(img, weights, n_patches, nx, patch_width, patch_height,  patch_im_width, patch_im_height)
+    upscale_dsize = (img.shape[2] * upscale_factor, img.shape[1] * upscale_factor)
+    for ch in range(n_channels):
+        # resizing
+        im = misc.imresize(img[ch], upscale_dsize, interp='nearest')
+        misc.imsave(("conv_%03d.png" % ch), im)
+
+
 def test(args):
     if args.snapshot is None:
         raise Exception("model snapshot is not specified for test")
 
     model = keras.models.load_model(args.snapshot)
+    show_layer_weights(model)
 
     # scanning directory for test images
     test_files = os.listdir(args.test_dir)
