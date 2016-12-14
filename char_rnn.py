@@ -42,6 +42,18 @@ def create_model_gru_big(chars, max_len):
     return model
 
 
+def create_model_gru_small(chars, max_len):
+    model = Sequential()
+    model.add(GRU(256, return_sequences=True, input_shape=(max_len, len(chars))))
+    model.add(Dropout(0.2))
+    model.add(GRU(256, return_sequences=False))
+    model.add(Dropout(0.2))
+    model.add(Dense(len(chars)))
+    model.add(Activation('softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam')
+    return model
+
+
 def create_model_gru_small_opt(chars, max_len):
     model = Sequential()
     model.add(GRU(512, return_sequences=True, input_shape=(max_len, len(chars))))
@@ -238,7 +250,7 @@ def train(args):
         start_epoch = parse_epoch(args.snapshot)
         print('using snapshot ' + args.snapshot)
     else:
-        model = create_model_gru_small_opt(all_chars, max_len)
+        model = create_model_gru_small(all_chars, max_len)
 
     if bool(args.train):
         train_model(model, text, char_labels, labels_char, max_len, all_chars, start_epoch)
